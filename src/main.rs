@@ -147,22 +147,38 @@ async fn download_video(body: web::Json<DownloadRequest>) -> HttpResponse {
         .to_string();
 
     let quality = body.quality.as_deref().unwrap_or("best");
-    let format_arg = match quality {
-        "audio" => "bestaudio[ext=m4a]/bestaudio".to_string(),
-        "720" => "bestvideo[height<=720]+bestaudio/best[height<=720]/best".to_string(),
-        "1080" => "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best".to_string(),
-        "best" => "bestvideo+bestaudio/best".to_string(),
-        custom => custom.to_string(),
-    };
+
+    // Build the yt-dlp arguments. "mp3" extracts audio and re-encodes to MP3
+    // (requires ffmpeg); everything else downloads video merged into MP4.
+    let mut args: Vec<String> = Vec::new();
+    if quality == "mp3" {
+        args.extend([
+            "-f".into(), "bestaudio/best".into(),
+            "--extract-audio".into(),
+            "--audio-format".into(), "mp3".into(),
+            "--audio-quality".into(), "0".into(), // 0 = best VBR quality
+        ]);
+    } else {
+        let format_arg = match quality {
+            "audio" => "bestaudio[ext=m4a]/bestaudio".to_string(),
+            "720" => "bestvideo[height<=720]+bestaudio/best[height<=720]/best".to_string(),
+            "1080" => "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best".to_string(),
+            "best" => "bestvideo+bestaudio/best".to_string(),
+            custom => custom.to_string(),
+        };
+        args.extend([
+            "-f".into(), format_arg,
+            "--merge-output-format".into(), "mp4".into(),
+        ]);
+    }
+    args.extend([
+        "-o".into(), output_template.clone(),
+        "--no-playlist".into(),
+        body.url.clone(),
+    ]);
 
     let output = Command::new("yt-dlp")
-        .args([
-            "-f", &format_arg,
-            "--merge-output-format", "mp4",
-            "-o", &output_template,
-            "--no-playlist",
-            &body.url,
-        ])
+        .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -195,8 +211,15 @@ async fn download_video(body: web::Json<DownloadRequest>) -> HttpResponse {
                             // Clean up the file after reading
                             let _ = tokio::fs::remove_file(&path).await;
 
+                            let content_type = match path.extension().and_then(|e| e.to_str()) {
+                                Some("mp3") => "audio/mpeg",
+                                Some("m4a") => "audio/mp4",
+                                Some("webm") => "audio/webm",
+                                _ => "video/mp4",
+                            };
+
                             HttpResponse::Ok()
-                                .content_type("video/mp4")
+                                .content_type(content_type)
                                 .insert_header((
                                     "Content-Disposition",
                                     format!("attachment; filename=\"{}\"", filename),
@@ -239,9 +262,20 @@ async fn health() -> HttpResponse {
         .map(|o| o.status.success())
         .unwrap_or(false);
 
+    // ffmpeg is required to merge video+audio (best/1080/720) and to encode MP3.
+    let ffmpeg_ok = Command::new("ffmpeg")
+        .arg("-version")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
     HttpResponse::Ok().json(serde_json::json!({
         "status": "ok",
         "yt_dlp_available": yt_dlp_ok,
+        "ffmpeg_available": ffmpeg_ok,
     }))
 }
 

@@ -5,7 +5,7 @@ A tiny self-hosted YouTube video/audio downloader. A Rust [actix-web](https://ac
 ## Features
 
 - **Web UI** — paste a URL, pick a quality, download. No build step for the frontend (plain `static/index.html`).
-- **Quality presets** — Best, 1080p, 720p, or audio-only (m4a).
+- **Quality presets** — Best, 1080p, 720p, audio-only (m4a), or **MP3** (re-encoded audio).
 - **URL validation** — only `http(s)` YouTube hosts (`youtube.com`, `youtu.be`, etc.) are accepted.
 - **Auto-cleanup** — downloaded files are streamed to the client and deleted from disk afterward.
 - **Health check** — verifies `yt-dlp` is installed and reachable.
@@ -59,7 +59,7 @@ The server listens on `127.0.0.1:8080`.
 Returns server status and whether `yt-dlp` is available.
 
 ```json
-{ "status": "ok", "yt_dlp_available": true }
+{ "status": "ok", "yt_dlp_available": true, "ffmpeg_available": true }
 ```
 
 ### `GET /api/info?url=<youtube_url>`
@@ -96,7 +96,16 @@ curl -X POST http://127.0.0.1:8080/api/download \
 | Field | Type | Description |
 | --- | --- | --- |
 | `url` | string | YouTube URL (required) |
-| `quality` | string | `best` (default), `1080`, `720`, `audio`, or a raw yt-dlp format string |
+| `quality` | string | `best` (default), `1080`, `720`, `audio` (m4a), `mp3`, or a raw yt-dlp format string |
+
+> `mp3` extracts the audio track and re-encodes it to MP3 (best VBR quality) — this requires `ffmpeg`. Example:
+>
+> ```bash
+> curl -X POST http://127.0.0.1:8080/api/download \
+>   -H "Content-Type: application/json" \
+>   -d '{"url": "https://www.youtube.com/watch?v=...", "quality": "mp3"}' \
+>   -o song.mp3
+> ```
 
 ## How it works
 
