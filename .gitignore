@@ -1,1 +1,13 @@
+# Rust build artifacts
 /target
+
+# Downloaded media (temporary)
+/downloads
+
+# Editor / IDE
+/.vscode
+/.idea
+*.swp
+
+# macOS
+.DS_Store
