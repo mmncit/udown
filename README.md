@@ -44,6 +44,7 @@ make release       # builds in release mode and runs ./target/release/udown
 | `make build` | Build in release mode |
 | `make run` | Run the server (debug) |
 | `make release` | Build in release mode and run the binary |
+| `make test` | Run the unit test suite |
 | `make check` | `cargo check` (compile without producing a binary) |
 | `make fmt` | `cargo fmt` |
 | `make lint` | `cargo clippy` |
@@ -116,13 +117,40 @@ curl -X POST http://127.0.0.1:8080/api/download \
 
 ## Project layout
 
+The code is organised into layers, each depending only on the ones above it:
+
 ```
 udown/
-├── src/main.rs        # actix-web server + yt-dlp wrapper
-├── static/index.html  # single-page web UI
-├── Cargo.toml         # dependencies
-└── Makefile           # build/run/lint shortcuts
+├── src/
+│   ├── main.rs            # bootstrap: build config, wire routes, start server
+│   ├── config.rs          # AppConfig — env-driven settings (host/port/dir)
+│   ├── error.rs           # AppError + actix ResponseError (one error type)
+│   ├── domain/            # pure logic — no IO, fully unit-tested
+│   │   ├── media.rs       #   Quality enum → yt-dlp args, content-type mapping
+│   │   └── validation.rs  #   validate_youtube_url
+│   ├── services/          # side effects
+│   │   └── ytdlp.rs       #   yt-dlp / ffmpeg subprocess + filesystem wrappers
+│   └── web/               # HTTP layer (actix-web)
+│       ├── dto.rs         #   request/response shapes
+│       ├── handlers.rs    #   thin handlers returning Result<_, AppError>
+│       └── routes.rs      #   route table
+├── static/index.html      # single-page web UI
+├── Cargo.toml             # dependencies
+└── Makefile               # build/run/lint shortcuts
 ```
+
+**Design notes**
+
+- **Layered & pure-core.** `domain` is free of IO and framework types, so its
+  logic is trivially unit-testable; `services` isolates all subprocess and
+  filesystem effects; `web` only translates HTTP ↔ domain.
+- **One error type.** Every fallible path returns `Result<_, AppError>`. Because
+  `AppError` implements actix's `ResponseError`, handlers use `?` and the right
+  status code + JSON body is produced automatically — no nested `match` trees.
+- **Configuration via env.** `UDOWN_HOST`, `UDOWN_PORT`, `UDOWN_DOWNLOAD_DIR`
+  override the defaults (`127.0.0.1`, `8080`, `./downloads`).
+
+Run the unit tests with `cargo test` (or `make` + `cargo test`).
 
 ## Notes
 

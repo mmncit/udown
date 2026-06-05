@@ -1,4 +1,4 @@
-.PHONY: build run dev clean check deps
+.PHONY: build run release test check clean deps fmt lint
 
 # Build the project in release mode
 build:
@@ -11,6 +11,10 @@ run:
 # Run the server (release mode)
 release: build
 	./target/release/udown
+
+# Run the unit test suite
+test:
+	cargo test
 
 # Check code compiles without building
 check:
