@@ -4,7 +4,7 @@ A tiny self-hosted YouTube video/audio downloader. A Rust [actix-web](https://ac
 
 ## Features
 
-- **Web UI** — paste a URL, pick a quality, download. No build step for the frontend (plain `static/index.html`).
+- **Web UI** — paste a URL and hit **Download MP3**, or pick another quality and hit **Download**. No build step for the frontend (plain `static/index.html`).
 - **CLI** — `udown mp3 <url>` writes the file straight to disk, no server needed.
 - **Quality presets** — Best, 1080p, 720p, audio-only (m4a), or **MP3** (re-encoded audio).
 - **Title-named files** — downloads arrive as `Me_at_the_zoo.mp3`, not a uuid.
@@ -49,7 +49,9 @@ Saved ./Me_at_the_zoo.mp3
 make run           # cargo run (debug)
 ```
 
-Then open **http://127.0.0.1:8080** in your browser.
+Then open **http://127.0.0.1:8080** in your browser, paste a link, and hit
+**Download MP3** — or pick a different quality from the dropdown and hit
+**Download**. The file is saved by your browser under the video's title.
 
 For a release build:
 
