@@ -31,6 +31,41 @@ impl Quality {
         }
     }
 
+    /// Whether realising this quality requires `ffmpeg`.
+    ///
+    /// MP3 needs it to re-encode, and the video presets need it to merge the
+    /// separate video and audio streams into one MP4. A single-stream audio
+    /// download does not, and a raw passthrough format could be either — so it
+    /// is reported as not required rather than blocking a valid request.
+    pub fn needs_ffmpeg(&self) -> bool {
+        match self {
+            Quality::Mp3 | Quality::Best | Quality::P1080 | Quality::P720 => true,
+            Quality::AudioM4a | Quality::Custom(_) => false,
+        }
+    }
+
+    /// The extension this quality is *guaranteed* to end up with, when that is
+    /// knowable in advance.
+    ///
+    /// Only MP3 is certain: `--extract-audio --audio-format mp3` always yields
+    /// `.mp3`. The video presets name `mp4` as a merge target, but a
+    /// single-stream fallback is not remuxed, and both `audio` and a raw
+    /// passthrough format depend on what the video actually offers — so those
+    /// report `None` rather than a guess.
+    ///
+    /// Used to disambiguate when yt-dlp has left an intermediate file next to
+    /// the finished one (it keeps the source with `-k`, for instance).
+    pub fn output_extension(&self) -> Option<&'static str> {
+        match self {
+            Quality::Mp3 => Some("mp3"),
+            Quality::Best
+            | Quality::P1080
+            | Quality::P720
+            | Quality::AudioM4a
+            | Quality::Custom(_) => None,
+        }
+    }
+
     /// The yt-dlp arguments that realise this quality (pure, no IO).
     pub fn ytdlp_args(&self) -> Vec<String> {
         match self {
@@ -117,6 +152,33 @@ mod tests {
                 .windows(2)
                 .any(|w| w == ["--merge-output-format", "mp4"]));
         }
+    }
+
+    #[test]
+    fn only_mp3_has_a_guaranteed_output_extension() {
+        assert_eq!(Quality::Mp3.output_extension(), Some("mp3"));
+        for q in [
+            Quality::Best,
+            Quality::P1080,
+            Quality::P720,
+            Quality::AudioM4a,
+            Quality::Custom("worstaudio".to_string()),
+        ] {
+            assert_eq!(q.output_extension(), None, "{q:?} should not guess");
+        }
+    }
+
+    #[test]
+    fn ffmpeg_is_required_for_mp3_and_for_merged_video() {
+        for q in [Quality::Mp3, Quality::Best, Quality::P1080, Quality::P720] {
+            assert!(q.needs_ffmpeg(), "{q:?} should need ffmpeg");
+        }
+    }
+
+    #[test]
+    fn ffmpeg_is_not_required_for_single_stream_or_passthrough() {
+        assert!(!Quality::AudioM4a.needs_ffmpeg());
+        assert!(!Quality::Custom("worstaudio".to_string()).needs_ffmpeg());
     }
 
     #[test]

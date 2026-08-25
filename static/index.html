@@ -74,8 +74,12 @@
       }
       .actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 0.5rem;
         margin-bottom: 1.5rem;
+      }
+      .actions button {
+        min-width: 8rem;
       }
       button {
         padding: 0.75rem 1.5rem;
@@ -111,6 +115,14 @@
       }
       .btn-download:hover:not(:disabled) {
         background: #e03030;
+      }
+      .btn-mp3 {
+        background: #4a7fe0;
+        color: #fff;
+        flex: 2;
+      }
+      .btn-mp3:hover:not(:disabled) {
+        background: #3a6fd0;
       }
       .status {
         padding: 1rem;
@@ -208,6 +220,9 @@
         <button class="btn-download" id="downloadBtn" onclick="startDownload()">
           Download
         </button>
+        <button class="btn-mp3" id="mp3Btn" onclick="downloadMp3()">
+          Download MP3
+        </button>
       </div>
 
       <div class="status" id="status"></div>
@@ -227,6 +242,7 @@
       const videoInfoEl = document.getElementById("videoInfo");
       const infoBtn = document.getElementById("infoBtn");
       const downloadBtn = document.getElementById("downloadBtn");
+      const mp3Btn = document.getElementById("mp3Btn");
 
       function showStatus(message, type) {
         statusEl.className = "status " + type;
@@ -241,6 +257,29 @@
       function setButtons(disabled) {
         infoBtn.disabled = disabled;
         downloadBtn.disabled = disabled;
+        mp3Btn.disabled = disabled;
+      }
+
+      // Read the body once, as text, and parse it as JSON only if it is JSON.
+      //
+      // resp.json() throws on an empty body, and a route that failed before
+      // writing one returns exactly that -- so the throw lands in the outer
+      // catch and a server-side failure gets reported as "Network error".
+      async function readJsonSafe(resp) {
+        try {
+          const text = await resp.text();
+          return text ? JSON.parse(text) : null;
+        } catch {
+          return null;
+        }
+      }
+
+      // A message worth showing a human: the server's own wording when it sent
+      // one, otherwise the status line so the failure is at least identifiable.
+      function errorMessage(resp, body, fallback) {
+        if (body && body.error) return body.error;
+        const status = [resp.status, resp.statusText].filter(Boolean).join(" ");
+        return status ? fallback + " (HTTP " + status + ")" : fallback;
       }
 
       async function fetchInfo() {
@@ -260,10 +299,10 @@
 
         try {
           const resp = await fetch("/api/info?url=" + encodeURIComponent(url));
-          const data = await resp.json();
+          const data = await readJsonSafe(resp);
 
-          if (!resp.ok) {
-            showStatus(data.error || "Failed to fetch info.", "error");
+          if (!resp.ok || !data) {
+            showStatus(errorMessage(resp, data, "Failed to fetch info."), "error");
             return;
           }
 
@@ -281,53 +320,63 @@
         }
       }
 
-      async function startDownload() {
+      // The MP3 shortcut. It moves the dropdown too, so the page keeps telling
+      // the truth about what was just downloaded.
+      function downloadMp3() {
+        qualitySelect.value = "mp3";
+        startDownload("mp3");
+      }
+
+      async function startDownload(qualityOverride) {
         const url = urlInput.value.trim();
         if (!url) {
           showStatus("Please enter a YouTube URL.", "error");
           return;
         }
 
+        const quality = qualityOverride || qualitySelect.value;
+        const label =
+          quality === "mp3"
+            ? "Extracting audio to MP3..."
+            : "Downloading... this may take a moment.";
+
         clearStatus();
         setButtons(true);
-        showStatus(
-          '<span class="spinner"></span> Downloading... this may take a moment.',
-          "loading",
-        );
+        showStatus('<span class="spinner"></span> ' + label, "loading");
 
         try {
           const resp = await fetch("/api/download", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              url: url,
-              quality: qualitySelect.value,
-            }),
+            body: JSON.stringify({ url: url, quality: quality }),
           });
 
           if (!resp.ok) {
-            const data = await resp.json();
-            showStatus(data.error || "Download failed.", "error");
+            const body = await readJsonSafe(resp);
+            showStatus(errorMessage(resp, body, "Download failed."), "error");
             return;
           }
 
           const disposition = resp.headers.get("Content-Disposition");
-          let filename = "video.mp4";
+          let filename = quality === "mp3" ? "audio.mp3" : "video.mp4";
           if (disposition) {
             const match = disposition.match(/filename="?(.+?)"?$/);
             if (match) filename = match[1];
           }
 
           const blob = await resp.blob();
+          const href = URL.createObjectURL(blob);
           const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
+          a.href = href;
           a.download = filename;
           document.body.appendChild(a);
           a.click();
           a.remove();
-          URL.revokeObjectURL(a.href);
+          // Revoking synchronously can cancel the save for a large file, so let
+          // the click settle first.
+          setTimeout(() => URL.revokeObjectURL(href), 1000);
 
-          showStatus("Download complete!", "info");
+          showStatus("Saved " + filename, "info");
         } catch (e) {
           showStatus("Network error: " + e.message, "error");
         } finally {
