@@ -1,4 +1,4 @@
-.PHONY: build run release test check clean deps fmt lint
+.PHONY: build run release test check clean deps fmt lint install uninstall
 
 # Build the project in release mode
 build:
@@ -11,6 +11,14 @@ run:
 # Run the server (release mode)
 release: build
 	./target/release/udown
+
+# Install the `udown` command into ~/.cargo/bin (on your PATH)
+install:
+	cargo install --path . --force
+
+# Remove the installed `udown` command
+uninstall:
+	cargo uninstall udown
 
 # Run the unit test suite
 test:
@@ -25,9 +33,10 @@ clean:
 	cargo clean
 	rm -rf downloads/
 
-# Install system dependencies (macOS)
+# Install system dependencies (macOS). ffmpeg is required for MP3 and for
+# merging separate video/audio streams.
 deps:
-	brew install yt-dlp
+	brew install yt-dlp ffmpeg
 
 # Format code
 fmt:

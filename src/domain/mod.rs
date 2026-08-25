@@ -2,7 +2,8 @@
 //!
 //! Everything here is deterministic and unit-testable in isolation:
 //! mapping a requested quality to yt-dlp arguments, choosing a content type,
-//! and validating incoming URLs.
+//! naming the output file, and validating incoming URLs.
 
 pub mod media;
+pub mod naming;
 pub mod validation;
